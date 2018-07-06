@@ -626,7 +626,8 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
     """
     data = im.copy()
     if start_time_index > 0:
-        data[:, :, :start_time_index] = 0
+        remove_mask = data[:, :, :start_time_index].any(axis=2)
+        data[remove_mask] = 0
     if first:
         # Extract time of first change
         data = extract_first(data, reduce=False)
