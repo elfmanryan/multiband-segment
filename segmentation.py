@@ -11,6 +11,7 @@ from skimage.measure import regionprops
 from sklearn import preprocessing
 
 BG_VAL = -1
+MASK_VAL = 9999
 
 try:
     type(profile)
@@ -550,6 +551,7 @@ def colorize(labels,N=10):
     seg_gray = cv2.cvtColor(seg.astype(np.uint8), cv2.COLOR_GRAY2RGB)
     seg_color = cv2.applyColorMap(seg_gray, cv2.COLORMAP_JET)
     seg_color[labels==BG_VAL] = 0
+    seg_color[labels==MASK_VAL] = 255
     return seg_color
 
 
@@ -626,8 +628,7 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
     """
     data = im.copy()
     if start_time_index > 0:
-        remove_mask = data[:, :, :start_time_index].any(axis=2)
-        data[remove_mask] = 0
+        mask = data[:, :, :start_time_index].any(axis=2)
     if first:
         # Extract time of first change
         data = extract_first(data, reduce=False)
@@ -660,6 +661,9 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
     # Perform a final clustering, merging also non-touching segments
     if ngroups > 0:
         labels = cluster(data, labels, n=ngroups, what=what, touch=False)
+    # Apply mask
+    if start_time_index > 0:
+        labels[mask] = MASK_VAL
 
     return labels
 
