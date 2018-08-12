@@ -1,4 +1,4 @@
-import sys 
+import sys
 from osgeo import gdal
 import numpy as np
 import cv2
@@ -33,17 +33,18 @@ def neighbor_matrix(labels, bg=True, connectivity=4, touch=True):
     connectivity : int, optional
         One of [4,8]. If 8, labels also connect via corners.
     touch : bool, optional
-        (legacy option) If False, labels are neighbors even if there is a gap of 1 pixel between
-        them. (default: True)
+        (legacy option) If False, labels are neighbors even if there is a gap
+        of 1 pixel between them. (default: True)
 
     Returns
     -------
     pd.DataFrame, shape (L,L)
-        A DataFrame where index and columns are the unique labels and position [i,j] is True iff
-        labels i and j are neighbors.
+        A DataFrame where index and columns are the unique labels and position
+        [i,j] is True iff labels i and j are neighbors.
     """
     x = np.unique(labels)
-    if not bg: x = x[x != BG_VAL]
+    if not bg:
+        x = x[x != BG_VAL]
     kernels = [
         np.array([[1]]),
         np.array([[1, 0, 0]]),
@@ -51,14 +52,15 @@ def neighbor_matrix(labels, bg=True, connectivity=4, touch=True):
         np.array([[1, 0, 0]]).T,
         np.array([[0, 0, 1]]).T
     ]
-    if connectivity==8:
+    if connectivity == 8:
         kernels.extend([
             np.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]),
             np.array([[0, 0, 1], [0, 0, 0], [0, 0, 0]]),
             np.array([[0, 0, 0], [0, 0, 0], [1, 0, 0]]),
             np.array([[0, 0, 0], [0, 0, 0], [0, 0, 1]]),
         ])
-    shifted = np.stack([cv2.filter2D(labels.astype(np.float32), -1, k) for k in kernels], axis=-1)
+    shifted = np.stack([cv2.filter2D(labels.astype(np.float32), -1, k)
+                        for k in kernels], axis=-1)
     if touch:
         bg_neighbors = shifted[labels != BG_VAL]
     else:
@@ -72,11 +74,11 @@ def neighbor_matrix(labels, bg=True, connectivity=4, touch=True):
     idx = np.arange(len(x))
     lookup = dict(np.stack([x, idx], axis=-1))
     npairs_idx = np.vectorize(lambda x: lookup[x], otypes=[np.int32])(npairs)
-    result = np.zeros((len(x),)*2, dtype=bool)
+    result = np.zeros((len(x),) * 2, dtype=bool)
     result[npairs_idx[:, 0], npairs_idx[:, 1]] = True
     result[npairs_idx[:, 1], npairs_idx[:, 0]] = True
-    result[x==BG_VAL, :] = False
-    result[:, x==BG_VAL] = False
+    result[x == BG_VAL, :] = False
+    result[:, x == BG_VAL] = False
     # DEBUG: Somehow this line is very expensive:
     # result = np.logical_or(result, result.T)
     return pd.DataFrame(result, index=x, columns=x)
@@ -99,11 +101,12 @@ def edge_length(labels, bg=True, connectivity=4):
     Returns
     -------
     pd.DataFrame, shape (L,L)
-        A DataFrame where index and columns are the unique labels and position [i,j] is the length
-        of the edge between labels i and j.
+        A DataFrame where index and columns are the unique labels and position
+        [i,j] is the length of the edge between labels i and j.
     """
     x = np.unique(labels)
-    if not bg: x = x[x != BG_VAL]
+    if not bg:
+        x = x[x != BG_VAL]
     kernels = [
         np.array([[1]]),
         np.array([[1, 0, 0]]),
@@ -112,14 +115,16 @@ def edge_length(labels, bg=True, connectivity=4):
         np.array([[0, 0, 1]]).T
     ]
     if connectivity == 8:
-        kernel.extend([
+        kernels.extend([
             np.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]),
             np.array([[0, 0, 1], [0, 0, 0], [0, 0, 0]]),
             np.array([[0, 0, 0], [0, 0, 0], [1, 0, 0]]),
             np.array([[0, 0, 0], [0, 0, 0], [0, 0, 1]]),
         ])
-    shifted = np.stack([cv2.filter2D(labels.astype(np.float32), -1, k) for k in kernels], axis=-1)
-    if not bg: shifted[shifted == BG_VAL] = np.nan
+    shifted = np.stack([cv2.filter2D(labels.astype(np.float32), -1, k)
+                        for k in kernels], axis=-1)
+    if not bg:
+        shifted[shifted == BG_VAL] = np.nan
     _mins = np.nanmin(shifted, axis=2).astype(np.int32)
     _maxs = np.nanmax(shifted, axis=2).astype(np.int32)
     edge = (_mins != _maxs)
@@ -128,8 +133,8 @@ def edge_length(labels, bg=True, connectivity=4):
     pairs = np.stack([l1, l2], axis=-1)
     pairs_idx = _replace_labels(pairs, pd.Series(np.arange(len(x)), index=x))
     result = np.zeros(x.shape*2, dtype=np.int32)
-    result[pairs_idx[:, 0],pairs_idx[:, 1]] += 1
-    result[pairs_idx[:, 1],pairs_idx[:, 0]] += 1
+    result[pairs_idx[:, 0], pairs_idx[:, 1]] += 1
+    result[pairs_idx[:, 1], pairs_idx[:, 0]] += 1
     result /= 2
     return pd.DataFrame(result, index=x, columns=x)
 
@@ -153,7 +158,8 @@ def _remap_labels(labels, lmap):
         The new label map.
     """
     if callable(lmap):
-        indexer = np.array([lmap(i) for i in range(labels.min(), labels.max() + 1)])
+        indexer = np.array([lmap(i) for i in range(labels.min(),
+                                                   labels.max() + 1)])
     else:
         _lmap = lmap.copy()
         if type(_lmap) is dict:
@@ -162,7 +168,8 @@ def _remap_labels(labels, lmap):
         fill_index = np.arange(labels.min(), labels.max() + 1)
         replace = pd.Series(fill_index, index=fill_index).copy()
         replace[_lmap.index] = _lmap.values
-        indexer = np.array([replace[i] for i in range(labels.min(), labels.max() + 1)])
+        indexer = np.array([replace[i] for i in range(labels.min(),
+                                                      labels.max() + 1)])
 
     return indexer[(labels - labels.min())]
 
@@ -170,15 +177,17 @@ def _remap_labels(labels, lmap):
 @profile
 def merge_connected(labels, connected, touch=False):
     """
-    Given a labeled map and a label connectivity matrix, merge connected labels.
+    Given a labeled map and a label connectivity matrix, merge connected
+    labels.
 
     Parameters
     ----------
     labels : np.array, shape (M,N)
         A map of integer labels.
     connected : pd.DataFrame, shape (L,L)
-        A DataFrame where index and columns are the unique labels and connected.loc[i,j] == True
-        iff labels i and j are connected wrt. any measure.
+        A DataFrame where index and columns are the unique labels and
+        connected.loc[i,j] == True iff labels i and j are connected wrt.
+        any measure.
     touch : bool, optional
         If True, only merge labels that share an edge. (default: False)
 
@@ -211,7 +220,8 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
     else:
         ll = np.unique(labels)
         ll = ll[ll != BG_VAL]
-        nm = pd.DataFrame(np.ones((len(ll), len(ll)), dtype=bool), index=ll, columns=ll)
+        nm = pd.DataFrame(np.ones((len(ll), len(ll)), dtype=bool),
+                          index=ll, columns=ll)
 
     # ------------------------------------------------------------------------
     if mode == 'distance':
@@ -219,10 +229,12 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
         stats = patch_stats(im, labels, what=['mean'])
         mean = stats['mean']
         x = mean.index
-        if threshold is None: threshold = 50
-        # dist = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(stats['mean'], 'euclidean'))
+        if threshold is None:
+            threshold = 50
+        # dist = scipy.spatial.distance.squareform(
+        #     scipy.spatial.distance.pdist(stats['mean'], 'euclidean'))
         # similar = (dist < threshold)
-        i1,i2 = np.meshgrid(x, x, copy=False)
+        i1, i2 = np.meshgrid(x, x, copy=False)
         p1 = mean.loc[i1[nm]]
         p2 = mean.loc[i2[nm]]
         d = np.linalg.norm(p1.values - p2.values, axis=1)
@@ -236,9 +248,10 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
         var = stats['var']
         area = stats['stats']['area']
         x = mean.index
-        if threshold is None: threshold = 0.0001
+        if threshold is None:
+            threshold = 0.0001
 
-        eps_var = 0 # Avoid zero variance.
+        eps_var = 0  # Avoid zero variance.
         x1, x2 = np.meshgrid(x, x, copy=False)
         i1 = x1[nm]
         i2 = x2[nm]
@@ -248,8 +261,11 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
         x2_var = var.loc[i2].values + eps_var
         x1_size = np.expand_dims(area.loc[i1].values, axis=-1)
         x2_size = np.expand_dims(area.loc[i2].values, axis=-1)
-        t = np.abs(x1_mean - x2_mean) / np.sqrt(x1_var/x1_size + x2_var/x2_size)
-        df = (x1_var/x1_size + x2_var/x2_size)**2 / (x1_var**2 / (x1_size**2 * (x1_size-1)) + x2_var**2 / (x2_size**2 * (x2_size-1)))
+        t = np.abs(x1_mean - x2_mean) / \
+            np.sqrt(x1_var/x1_size + x2_var/x2_size)
+        df = (x1_var/x1_size + x2_var/x2_size) ** 2 / \
+            (x1_var**2 / (x1_size**2 * (x1_size-1)) +
+             x2_var**2 / (x2_size**2 * (x2_size-1)))
         p = 1 - (scipy.stats.t.cdf(t, df) - scipy.stats.t.cdf(-t, df))
         p_ = np.nan_to_num(p).min(axis=1)
         similar_flat = (p_ > threshold)
@@ -257,7 +273,8 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
         similar[nm] = similar_flat
 
     elif mode == 'shape':
-        if threshold is None: threshold = 100
+        if threshold is None:
+            threshold = 100
         stats = patch_stats(im, labels, what=['stats', 'coords'])
         area = stats['stats']['area']
         coords = stats['coords']
@@ -275,7 +292,8 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
         similar[nm] = (score > threshold)
 
     elif mode == 'edge':
-        if threshold is None: threshold = 0.01
+        if threshold is None:
+            threshold = 0.01
         e = edge_length(labels, bg=False)
         stats = patch_stats(im, labels, what=['stats'])
         # area = stats['stats']['area']
@@ -312,39 +330,40 @@ def bulk_merge(im, labels, mode='distance', threshold=None, touch=True):
     np.fill_diagonal(similar, False)
 
     # ------------------------------------------------------------------------
-    if touch: merge = np.logical_and(similar, nm)
+    if touch:
+        merge = np.logical_and(similar, nm)
     merged_labels = merge_connected(labels, merge)
     # ------------------------------------------------------------------------
     # merged_labels = relabel(merged_labels)
     return merged_labels
 
-    # ------------------------------------------------------------------------
-    cv2.imwrite('sample_segments.jpg', colorize(merged_labels))
-    # ------------------------------------------------------------------------
+    # # -----------------------------------------------------------------------
+    # cv2.imwrite('sample_segments.jpg', colorize(merged_labels))
+    # # -----------------------------------------------------------------------
 
+    # # multivariate t-test?
+    # # cov = stats['cov']
+    # x1_cov, x2_cov = np.meshgrid(stats['cov'], stats['cov'], copy=False)
+    # cov = (x1_size-1) * x1_cov + (x2_size-1) * x2_cov
+    # d_mu = x1_mean - x2_mean
+    # Tsq = x1_size * x2_size / (x1_size + x2_size) * d_mu * cov * d_mu
+    # # ...
+    # from spm1d.stats import hotellings2
+    # _data2 = pd.Series(index=ll, dtype=np.object)
+    # for l, r in _data.iterrows():
+    #     _data2.loc[l] = np.stack(r, axis=-1)
+    # for l, r in _data2.iteritems():
+    #     _data2.loc[l] = r.T
+    # T2 = hotellings2(_data2.loc[2], _data2.loc[3])
+    # _data3 = np.expand_dims(_data2, axis=-1)
 
-    # multivariate t-test?
-    # cov = stats['cov']
-    x1_cov, x2_cov = np.meshgrid(stats['cov'], stats['cov'], copy=False)
-    cov = (x1_size-1) * x1_cov + (x2_size-1) * x2_cov
-    d_mu = x1_mean - x2_mean
-    Tsq = x1_size * x2_size / (x1_size + x2_size) * d_mu * cov * d_mu
-    # ...
-    from spm1d.stats import hotellings2
-    _data2 = pd.Series(index=ll, dtype=np.object)
-    for l, r in _data.iterrows():
-        _data2.loc[l] = np.stack(r, axis=-1)
-    for l, r in _data2.iteritems():
-        _data2.loc[l] = r.T
-    T2 = hotellings2(_data2.loc[2], _data2.loc[3])
-    _data3 = np.expand_dims(_data2, axis=-1)
-    def hdist(u, v):
-        try:
-            return hotellings2(u[0], v[0]).inference(0.01).h0reject
-        except:
-            return np.nan
+    # def hdist(u, v):
+    #     try:
+    #         return hotellings2(u[0], v[0]).inference(0.01).h0reject
+    #     except:
+    #         return np.nan
 
-    T2_grid = scipy.spatial.distance.pdist(_data3, hdist)
+    # T2_grid = scipy.spatial.distance.pdist(_data3, hdist)
 
 
 @profile
@@ -359,7 +378,8 @@ def merge_small(im, labels, threshold):
     labels : np.array, shape (M,N)
         The corresponding label map.
     threshold : int
-        Segments with an area less than `threshold` will be merged (if they have a neighbor).
+        Segments with an area less than `threshold` will be merged
+        (if they have a neighbor).
 
     Returns
     -------
@@ -373,10 +393,11 @@ def merge_small(im, labels, threshold):
     small = (area < threshold)
     nm = neighbor_matrix(new_labels, touch=True, bg=False)
     _nm = nm.loc[small, :]
-    _i1, _i2 = np.meshgrid(mean.loc[:].index, mean.loc[small].index, copy=False)
+    _i1, _i2 = np.meshgrid(mean.loc[:].index, mean.loc[small].index,
+                           copy=False)
     # Compute distances
     p1 = mean.loc[_i1[_nm]]
-    p2 = mean.loc[_i2[_nm]] # These are the small ones with neighbors
+    p2 = mean.loc[_i2[_nm]]  # These are the small ones with neighbors
     d = np.linalg.norm(p1.values - p2.values, axis=1)
 
     # This line can probably be made faster:
@@ -404,13 +425,14 @@ def patch_stats(im, labels, what=['mean', 'stats']):
         The corresponding label map.
     what : list, optional
         The properties of each segment to compute. Must be a sublist of
-        ['mean', 'var', 'cov', 'coords', 'stats']. (default: ['mean', 'coords'])
+        ['mean', 'var', 'cov', 'coords', 'stats'].
+        (default: ['mean', 'coords'])
 
     Returns
     -------
     dict of pd.DataFrame
-        A dictionary of segment properties as DataFrames. Each attribute passed in `what` will be
-        a key in the dictionary.
+        A dictionary of segment properties as DataFrames. Each attribute
+        passed in `what` will be a key in the dictionary.
     """
     _im = np.atleast_3d(im)
     ndim = _im.shape[2]
@@ -435,12 +457,14 @@ def patch_stats(im, labels, what=['mean', 'stats']):
         if 'mean' in what:
             result['mean'][i] = np.array([_.mean_intensity for _ in props])
         if 'var' in what:
-            result['var'][i] = np.array([np.var(_.intensity_image[_.image]) for _ in props])
+            result['var'][i] = np.array([np.var(_.intensity_image[_.image])
+                                         for _ in props])
         if 'cov' in what:
             _data[i] = np.array([_.intensity_image[_.image] for _ in props])
 
     if 'cov' in what:
-        for l, r in _data.iterrows(): result['cov'].loc[l] = np.cov(np.stack(r))
+        for l, r in _data.iterrows():
+            result['cov'].loc[l] = np.cov(np.stack(r))
 
     if 'stats' in what:
         result['stats'] = pd.DataFrame(index=ll)
@@ -448,7 +472,8 @@ def patch_stats(im, labels, what=['mean', 'stats']):
         result['stats']['perimeter'] = np.array([_.perimeter for _ in props])
 
     if 'coords' in what:
-        result['coords'] = pd.DataFrame(np.array([_.centroid for _ in props]), index=ll, columns=['x', 'y'])
+        result['coords'] = pd.DataFrame(np.array([_.centroid for _ in props]),
+                                        index=ll, columns=['x', 'y'])
 
     return result
 
@@ -477,7 +502,10 @@ def mark_background(im, labels):
     limit = im.max()
     min_val_all = limit * 0.04
     min_val_large_area = limit * 0.25
-    bg_labels = mean.loc[np.logical_or(mean.max(axis=1) < min_val_all, np.logical_and(mean.max(axis=1) < min_val_large_area, area > 100))].index
+    bg_labels = mean.loc[np.logical_or(
+        mean.max(axis=1) < min_val_all,
+        np.logical_and(mean.max(axis=1) < min_val_large_area, area > 100)
+        )].index
     bg_mask = np.isin(bg_marked, bg_labels)
     bg_marked[bg_mask] = BG_VAL
     return bg_marked
@@ -497,17 +525,18 @@ def cluster(im, labels, n=10, what=['mean', 'coords'], touch=False):
     n : int, optional
         The number of clusters (default: 10)
     what : list, optional
-        The properties of each segment to use for clustering. Must be a sublist of
-        ['mean', 'var', 'coords', 'stats']. (default: ['mean', 'coords'])
+        The properties of each segment to use for clustering. Must be a sublist
+        of ['mean', 'var', 'coords', 'stats']. (default: ['mean', 'coords'])
     touch : bool, optional
-        Whether only to merge segments if they physically touch (share an edge). (default: False)
+        Whether only to merge segments if they physically touch
+        (share an edge). (default: False)
 
     Returns
     -------
     np.array, shape (M,N)
         The new label map.
     """
-    ## Clustering
+    # Clustering
     what_with_area = what
     if 'stats' not in what_with_area:
         what_with_area += ['stats']
@@ -525,13 +554,13 @@ def cluster(im, labels, n=10, what=['mean', 'coords'], touch=False):
 
     clustered = labels.copy()
     cl1, cl2 = np.meshgrid(cl, cl, copy=False)
-    merge = pd.DataFrame(cl1==cl2, index=x, columns=x)
+    merge = pd.DataFrame(cl1 == cl2, index=x, columns=x)
     clustered = merge_connected(clustered, merge, touch=touch)
 
     return clustered
 
 
-def colorize(labels,N=10):
+def colorize(labels, N=10):
     """
     Apply a color map to a map of integer labels.
 
@@ -550,8 +579,8 @@ def colorize(labels,N=10):
     seg = (labels % N) * (255/(N-1))
     seg_gray = cv2.cvtColor(seg.astype(np.uint8), cv2.COLOR_GRAY2RGB)
     seg_color = cv2.applyColorMap(seg_gray, cv2.COLORMAP_JET)
-    seg_color[labels==BG_VAL] = 0
-    seg_color[labels==MASK_VAL] = 255
+    seg_color[labels == BG_VAL] = 0
+    seg_color[labels == MASK_VAL] = 255
     return seg_color
 
 
@@ -567,8 +596,9 @@ def extract_first(im, reduce=True):
     im : np.array, shape (M,N,C)
         The multivariate image.
     reduce : bool, optional
-        If True, reduce image to shape (M,N,1) where each value is the index of first change (default: True).
-        Otherwise, retain array structure but remove all changes after the first.
+        If True, reduce image to shape (M,N,1) where each value is the index
+        of first change (default: True). Otherwise, retain array structure but
+        remove all changes after the first.
 
     Returns
     -------
@@ -586,7 +616,8 @@ def extract_first(im, reduce=True):
     return result
 
 
-def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, min_size=100, pmin=0, dmax=0, nclusters=0, ngroups=0):
+def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0,
+            min_size=100, pmin=0, dmax=0, nclusters=0, ngroups=0):
     """
     Segment an image.
 
@@ -598,32 +629,34 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
         The segment initiation method. Currently only supports `felzenswalb`
         (default: 'felzenszwalb').
     first : bool, optional
-        Whether to only use the time of first change for the segmentation (default: True).
+        Whether to only use the time of first change for the segmentation
+        (default: True).
     sigma : float, optional
-        Blur the data before segmenting using a Gaussian filter with parameter sigma.
-        `0` means no blurring (default: 0).
+        Blur the data before segmenting using a Gaussian filter with parameter
+        sigma. `0` means no blurring (default: 0).
     start_time_index : int, optional
         The index of the time before which to ignore all changes (default: 0).
     min_size : int, optional
-        Segments below this threshold will be merged with a neighboring segment (default: 100).
+        Segments below this threshold will be merged with a neighboring segment
+        (default: 100).
     pmin : float, optional
-        The threshold for the p-value of the t-test below which segments will be merged (default: 0).
-        `0` means no t-test based merging.
+        The threshold for the p-value of the t-test below which segments will
+        be merged (default: 0). `0` means no t-test based merging.
     dmax : float, optional
-        The Euclidean feature distance threshold for merging segments (default: 0).
-        `0` means no distance based merging.
+        The Euclidean feature distance threshold for merging segments
+        (default: 0). `0` means no distance based merging.
     nclusters : int, optional
-        A KMeans clustering will be performed with k = `nclusters` (default: 0). Only segments
-        that belong to the same cluster _and_ are adjacent to each other will be merged.
-        `0` means no clustering.
+        A KMeans clustering will be performed with k = `nclusters`
+        (default: 0). Only segments that belong to the same cluster _and_ are
+        adjacent to each other will be merged. `0` means no clustering.
     ngroups : int, optional
-        Return exactly `ngroups` different segments which will not need to touch.
-        `0` means no such grouping will be done (default: 0).
+        Return exactly `ngroups` different segments which will not need to
+        touch. `0` means no such grouping will be done (default: 0).
 
     Returns
     -------
     np.array, shape (M,N)
-        An MxN array, where each pixel contains an integer index of the segment 
+        An MxN array, where each pixel contains an integer index of the segment
         it belongs to. Identified background pixels are labeled with `-1`.
     """
     data = im.copy()
@@ -640,7 +673,8 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
         data = cv2.GaussianBlur(data, ksize=(5, 5), sigmaX=sigma)
     # Initiate segments using Felzenszwalb algorithm
     if init == 'felzenszwalb':
-        labels = skseg.felzenszwalb(data, scale=0.9, sigma=0, min_size=20, multichannel=True)
+        labels = skseg.felzenszwalb(data, scale=0.9, sigma=0, min_size=20,
+                                    multichannel=True)
         labels += 1
     else:
         raise ValueError('"%s" is not a valid initiation method.' % init)
@@ -648,7 +682,8 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
     labels = mark_background(data, labels)
     # Merge segments based on pairwise similarity (distance)
     if dmax > 0:
-        labels = bulk_merge(data, labels, 'distance', threshold=dmax, touch=True)
+        labels = bulk_merge(data, labels, 'distance', threshold=dmax,
+                            touch=True)
     # Merge segments based on pairwise similarity (ttest)
     if pmin > 0:
         labels = bulk_merge(data, labels, 'ttest', threshold=pmin, touch=True)
@@ -670,9 +705,9 @@ def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0, mi
 
 @profile
 def load_im(path, sub=False):
-    ##
-    ## Load sub image for development
-    ##
+    #
+    # Load sub image for development
+    #
     src = gdal.Open(path)
     data = src.ReadAsArray()
     if sub:
@@ -683,7 +718,9 @@ def load_im(path, sub=False):
 
 if __name__ == '__main__':
     im = load_im(path=sys.argv[1], sub=True)
-    labels = segment(im, first=True, sigma=0.6, start_time_index=0, min_size=100, nclusters=5, ngroups=0)
+    labels = segment(im, first=True, sigma=0.6, start_time_index=0,
+                     min_size=100, nclusters=5, ngroups=0)
     first = extract_first(im, reduce=True)
-    cv2.imwrite('test_first_change.jpg', colorize(first[:, :, 0].astype(int) - 1, N=first.max()))
+    cv2.imwrite('test_first_change.jpg',
+                colorize(first[:, :, 0].astype(int) - 1, N=first.max()))
     cv2.imwrite('test_segmentation.jpg', colorize(labels, N=10))
