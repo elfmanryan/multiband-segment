@@ -392,7 +392,7 @@ def merge_small(im, labels, threshold):
     area = stats['stats']['area']
     small = (area < threshold)
     nm = neighbor_matrix(new_labels, touch=True, bg=False)
-    _nm = nm.loc[small, :]
+    _nm = nm.loc[small, :].values
     _i1, _i2 = np.meshgrid(mean.loc[:].index, mean.loc[small].index,
                            copy=False)
     # Compute distances
