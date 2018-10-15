@@ -615,6 +615,37 @@ def extract_first(im, reduce=True):
     return result
 
 
+def extract_frequency(im, pixel_value = 255):
+    """
+    Extract frequency of non-zero entries across bands for each pixel.
+
+    NOTE: The result is indexed from one rather than zero, to distinguish
+    a signal from the case where all bands are zero.
+    A frequency of 1 indicates one count from across all bands
+
+    Parameters
+    ----------
+    im : np.array, shape (M,N,C)
+        The multivariate image.
+
+    pixel_value : int, optional
+        The value of pixel that counts towards the frequency of values in the z dimensions
+
+    Returns
+    -------
+    np.array, shape (M,N,1)
+        The frequency of per-pixel change .
+    """
+
+    any_signal = im.sum(axis=2) > 0
+    freq = (im == pixel_value).sum(axis=2).astype(np.int32)
+
+    result = np.expand_dims(freq, axis=-1) + 1 #not sure what happening here
+    result[~any_signal] = 0 #no change
+
+    return result
+
+
 def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0,
             min_size=100, pmin=0, dmax=0, nclusters=0, ngroups=0):
     """
