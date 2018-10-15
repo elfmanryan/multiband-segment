@@ -546,8 +546,7 @@ def cluster(im, labels, n=10, what=['mean', 'coords'], touch=False):
     scaler = preprocessing.StandardScaler().fit(X)
     X_scaled = scaler.transform(X)
 
-    clust = KMeans(n_clusters=n, random_state=0).fit(X_scaled,
-                                                     sample_weight=weights)
+    clust = KMeans(n_clusters=n, random_state=0).fit(X_scaled) #sample_weight=weights  !unexpected argument
 
     cl = clust.labels_
     x = X.index
