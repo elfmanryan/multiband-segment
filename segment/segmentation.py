@@ -11,7 +11,7 @@ from skimage.measure import regionprops
 from sklearn import preprocessing
 
 BG_VAL = -1
-MASK_VAL = 9999
+MASK_VAL = 9999 
 
 try:
     type(profile)
