@@ -1,0 +1,5 @@
+README.md
+segment.egg-info/PKG-INFO
+segment.egg-info/SOURCES.txt
+segment.egg-info/dependency_links.txt
+segment.egg-info/top_level.txt

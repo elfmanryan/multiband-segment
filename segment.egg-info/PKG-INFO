@@ -1,0 +1,15 @@
+Metadata-Version: 1.2
+Name: segment
+Version: 0.0.0
+Summary: Segment
+Home-page: UNKNOWN
+Author: Johannes
+Author-email: Johannes.Hansen@ed.ac.uk
+License: UNKNOWN
+Description: Segments change maps
+Platform: UNKNOWN
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Requires-Python: >=3.6,<3.7

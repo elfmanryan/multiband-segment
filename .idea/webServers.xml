@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="f08bdfd6-a285-453d-b004-2588d1859985" name="crawly" url="http://192.168.16.3">
+        <fileTransfer host="192.168.16.3" port="22" privateKey="C:\Users\ryan.elfman\.ssh\crawly_rsa" rootFolder="/home/ryan" accessType="SFTP" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

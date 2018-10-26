@@ -5,12 +5,10 @@ import cv2
 import scipy.stats
 from scipy.sparse import csgraph, csr_matrix
 import pandas as pd
-from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+from sklearn.cluster import KMeans
 from skimage import segmentation as skseg
 from skimage.measure import regionprops
 from sklearn import preprocessing
-from sklearn.neighbors import kneighbors_graph
-
 
 BG_VAL = -1
 MASK_VAL = 9999
@@ -480,7 +478,6 @@ def patch_stats(im, labels, what=['mean', 'stats']):
     return result
 
 
-
 @profile
 def mark_background(im, labels):
     """
@@ -514,57 +511,10 @@ def mark_background(im, labels):
     return bg_marked
 
 
-def denoise(im, labels, bg_value=-1, h=1, template_window_size=5, search_window_size=7):
-    """function uses open cv2 denoise over a greyscale intensity image created from the frequency of change
-    to define a new 'clean' background. This background value of zero is used with a boolean condition to apply
-    to mark the original labels array as background using a the global background value.
-
-    Parameters
-    --------
-    im : 3d image, boolean with (255,0)
-    labels : int, array (X,Y)
-    bg_value : int, float
-
-    cv2 denoise params:
-    https://docs.opencv.org/3.0-beta/modules/photo/doc/denoising.html
-
-    h=None,
-    templateWindowSize=None,
-    searchWindowSize=None
-
-    returns
-    --------
-    labels array with clean background
-    """
-
-    labels_copy = labels.copy()
-
-    # boolean image has only 255
-    grey_image = extract_frequency(im, pixel_value=255)
-
-    # denoise the grey image
-    denoise_image = cv2.fastNlMeansDenoising(grey_image.astype(np.uint8),
-                                             None, h,
-                                             template_window_size,
-                                             search_window_size)
-    denoise_image = np.asarray(denoise_image)
-
-    # create conditional using clean denoised background
-    bool_condition = np.where(denoise_image == 0)
-
-    labels_copy[bool_condition] = BG_VAL  # map the clean background to the labels array
-
-    return labels_copy
-
-
 @profile
-
-
-
-def cluster(im, labels, algorithm='k_means', what=['mean', 'coords'], touch=True, **cluster_params): #n=10, touch=False
+def cluster(im, labels, n=10, what=['mean', 'coords'], touch=False):
     """
-
-    Merge labels based on different clustering algorithms i.e. KMeans clustering.
+    Merge labels based on a KMeans clustering.
 
     Parameters
     ----------
@@ -592,24 +542,11 @@ def cluster(im, labels, algorithm='k_means', what=['mean', 'coords'], touch=True
         what_with_area += ['stats']
     stats = patch_stats(im, labels, what=what_with_area)
     weights = stats['stats']['area']
-
     X = pd.concat([stats[_] for _ in what], axis=1)
-    X_scale = preprocessing.StandardScaler().fit_transform(X)
+    scaler = preprocessing.StandardScaler().fit(X)
+    X_scaled = scaler.transform(X)
 
-    if algorithm == 'k_means':
-        clust = KMeans(**cluster_params).fit(X_scale,sample_weight=weights) #random_state=0,
-        # n_clusters=10
-        #sample_weight=weights
-
-    if algorithm == 'agglomerative_clustering':
-        connectivity = kneighbors_graph(X, n_neighbors=8, include_self=False)
-        clust = AgglomerativeClustering(**cluster_params, #n_clusters=10, #linkage = ward, #affinity = euclidean
-                                        connectivity=connectivity).fit(X_scale)
-
-    if algorithm == 'dbscan':
-        clust = DBSCAN(**cluster_params).fit(X, sample_weight=weights)  #eps=0.5,
-        # min_samples=10,
-        # metric='euclidean'
+    clust = KMeans(n_clusters=n, random_state=0).fit(X_scaled) #sample_weight=weights  !unexpected argument
 
     cl = clust.labels_
     x = X.index
@@ -709,7 +646,8 @@ def extract_frequency(im, pixel_value = 255):
     return result
 
 
-def segment(im, select_first=False, segment_params=None, cluster_params=None, **kwargs):
+def segment(im, init='felzenszwalb', first=True, sigma=0, start_time_index=0,
+            min_size=100, pmin=0, dmax=0, nclusters=0, ngroups=0):
     """
     Segment an image.
 
@@ -717,13 +655,14 @@ def segment(im, select_first=False, segment_params=None, cluster_params=None, **
     ----------
     im : np.array, shape (M,N,C)
         The image to segment.
-
-
-    select_first : bool, optional
+    init : str, optional
+        The segment initiation method. Currently only supports `felzenswalb`
+        (default: 'felzenszwalb').
+    first : bool, optional
         Whether to only use the time of first change for the segmentation
         (default: True).
-    smooth_sigma : float, optional
-        smooth the data before segmenting using a Gaussian filter with parameter
+    sigma : float, optional
+        Blur the data before segmenting using a Gaussian filter with parameter
         sigma. `0` means no blurring (default: 0).
     start_time_index : int, optional
         The index of the time before which to ignore all changes (default: 0).
@@ -736,23 +675,13 @@ def segment(im, select_first=False, segment_params=None, cluster_params=None, **
     dmax : float, optional
         The Euclidean feature distance threshold for merging segments
         (default: 0). `0` means no distance based merging.
-
-
-    DEPRECIATRED-use cluster_params. nclusters : int, optional
+    nclusters : int, optional
         A KMeans clustering will be performed with k = `nclusters`
         (default: 0). Only segments that belong to the same cluster _and_ are
         adjacent to each other will be merged. `0` means no clustering.
-
-
     ngroups : int, optional
         Return exactly `ngroups` different segments which will not need to
         touch. `0` means no such grouping will be done (default: 0).
-
-    cluster_params: dict, optional
-        A dictionary of parameters excepted by the scikit learn clustering algorithms.
-        The key 'cluster_algo' lets you choose between the sci-kit.cluster algos of:
-            'k_means', 'agglomerative_clustering', 'dbscan'
-            see-- http://scikit-learn.org/stable/modules/clustering.html
 
     Returns
     -------
@@ -761,56 +690,44 @@ def segment(im, select_first=False, segment_params=None, cluster_params=None, **
         it belongs to. Identified background pixels are labeled with `-1`.
     """
     data = im.copy()
-    if 'start_time_index' in kwargs:
-        mask = data[:, :, : kwargs['start_time_index']].any(axis=2)
-
-    if select_first:
+    if start_time_index > 0:
+        mask = data[:, :, :start_time_index].any(axis=2)
+    if first:
         # Extract time of first change
         data = extract_first(data, reduce=False)
         what = ['mean', 'var']
     else:
         what = ['mean']
-
-    if 'smooth_sigma' in kwargs:
-        # Do a Gaussian blur of the data.  notes -- has a sudden effect between 0.28 and 0.3
-        data = cv2.GaussianBlur(data, ksize=(5, 5), sigmaX=kwargs['smooth_sigma'])
-
+    if sigma > 0:
+        # Do a Gaussian blur of the data
+        data = cv2.GaussianBlur(data, ksize=(5, 5), sigmaX=sigma)
     # Initiate segments using Felzenszwalb algorithm
-    print(list(segment_params))
-    if kwargs['seg_algorithm'] == 'felzenszwalb':
-        #remove the key as its not used by the algorithm sci-kit call
-        labels = skseg.felzenszwalb(data, **segment_params) # scale=0.9, sigma=0, min_size=20, multichannel=True
+    if init == 'felzenszwalb':
+        labels = skseg.felzenszwalb(data, scale=0.9, sigma=0, min_size=20,
+                                    multichannel=True)
         labels += 1
-
-    # elif init == 'quickshift': #NOT tested
-    #     labels = skseg.quickshift(data, **segment_params) #ratio=1.0, kernel_size=5, max_dist=10,
-    #                                         # return_tree=False, sigma=0, # convert2lab=True, random_seed=42
     else:
-        raise ValueError(f"segment_params 'algorithm' not recognised as a segmenter initiation method")
-
-    # Mask out detected background using frequency intensity
-    labels = denoise(data, labels)
-    #labels = mark_background(data, labels)
-
-    # Merge segments based on k_means, dbscan or algomerative_clustering
-    if 'cluster_algorithm' in kwargs:
-         #this is unexpected for sci-kit learn
-        labels = cluster(data, labels, algorithm=kwargs['cluster_algorithm'], what=what, touch=True, **cluster_params)
-
+        raise ValueError('"%s" is not a valid initiation method.' % init)
+    # Mask out detected background
+    labels = mark_background(data, labels)
     # Merge segments based on pairwise similarity (distance)
-    if 'dmax' in kwargs:
-        labels = bulk_merge(data, labels, 'distance', threshold=kwargs['dmax'], touch=True)
+    if dmax > 0:
+        labels = bulk_merge(data, labels, 'distance', threshold=dmax,
+                            touch=True)
     # Merge segments based on pairwise similarity (ttest)
-    if 'pmin' in kwargs:
-        labels = bulk_merge(data, labels, 'ttest', threshold=kwargs['pmin'], touch=True)
+    if pmin > 0:
+        labels = bulk_merge(data, labels, 'ttest', threshold=pmin, touch=True)
+    # Merge segments based on KMeans clustering
+    if nclusters > 0:
+        labels = cluster(data, labels, n=nclusters, what=what, touch=True)
     # Merge small segments
-    if 'min_size' in kwargs:
-        labels = merge_small(data, labels, kwargs['min_size'])
+    if min_size > 0:
+        labels = merge_small(data, labels, min_size)
     # Perform a final clustering, merging also non-touching segments
-    if 'ngroups' in kwargs:
-        labels = cluster(data, labels, n=kwargs['ngroups'], what=what, touch=False)
+    if ngroups > 0:
+        labels = cluster(data, labels, n=ngroups, what=what, touch=False)
     # Apply mask
-    if 'start_time_index' in kwargs:
+    if start_time_index > 0:
         labels[mask] = MASK_VAL
 
     return labels
@@ -820,51 +737,13 @@ def segment(im, select_first=False, segment_params=None, cluster_params=None, **
 def load_im(path, sub=False):
     #
     # Load sub image for development
-    print(f"Loading path {path}")
-
+    #
     src = gdal.Open(path)
     data = src.ReadAsArray()
     if sub:
         data = data[:, 18000:20000, 5500:7500]
-    print(f"image has shape {data.shape}")
     im = data.transpose((1, 2, 0))
     return im
-
-
-def apply_stats_to_labels(im, labels, what='freq', stat='mean'):
-    """Simple function to apply summary statistics to the segmentation labels
-
-    Parameters
-    ---------
-    im : (X,Y,Z) ndarray change array
-
-    labels :  int, required
-
-    what : str, optional
-        how to summarise the data into (X,Y,1) along the Z/time dimension
-
-    stat : str, optional
-        The spatial statistic to summarise the pixels within each patch
-
-    Returns
-    --------
-
-    The segmented patches with each pixel sharing the common statistic of the patch segment
-
-    """
-
-    #apply mean time of first change statistic to each segment label
-    if what == 'first':
-        data = extract_first(im)
-    elif what == 'freq':
-        data = extract_frequency(im)
-
-    stats = patch_stats(data, labels)
-    select_patch_stats = stats[stat]
-    select_patch_stats.loc[-1] = 0 #mark the background as 0
-    stats_func = np.vectorize(lambda i: select_patch_stats.loc[i])
-    labelled_array = stats_func(labels)
-    return labelled_array
 
 
 if __name__ == '__main__':
@@ -875,5 +754,3 @@ if __name__ == '__main__':
     cv2.imwrite('test_first_change.jpg',
                 colorize(first[:, :, 0].astype(int) - 1, N=first.max()))
     cv2.imwrite('test_segmentation.jpg', colorize(labels, N=10))
-
-    #dst = cv2.fastNlMeansDenoisingMulti(noisy, 2, 5, None, 4, 7, 35)
